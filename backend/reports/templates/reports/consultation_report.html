@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Consultation Report</title>
+<style>
+  @font-face {
+    font-family: "Noto Sans";
+    src: url("{{ fonts_dir_uri }}/NotoSans-Regular.ttf");
+    font-weight: 400;
+  }
+  @font-face {
+    font-family: "Noto Sans";
+    src: url("{{ fonts_dir_uri }}/NotoSans-Bold.ttf");
+    font-weight: 700;
+  }
+  @font-face {
+    font-family: "Noto Sans Devanagari";
+    src: url("{{ fonts_dir_uri }}/NotoSansDevanagari-Regular.ttf");
+    font-weight: 400;
+  }
+  @font-face {
+    font-family: "Noto Sans Devanagari";
+    src: url("{{ fonts_dir_uri }}/NotoSansDevanagari-Bold.ttf");
+    font-weight: 700;
+  }
+  @font-face {
+    font-family: "Noto Sans Tamil";
+    src: url("{{ fonts_dir_uri }}/NotoSansTamil-Regular.ttf");
+    font-weight: 400;
+  }
+  @font-face {
+    font-family: "Noto Sans Tamil";
+    src: url("{{ fonts_dir_uri }}/NotoSansTamil-Bold.ttf");
+    font-weight: 700;
+  }
+  @font-face {
+    font-family: "Noto Sans Telugu";
+    src: url("{{ fonts_dir_uri }}/NotoSansTelugu-Regular.ttf");
+    font-weight: 400;
+  }
+  @font-face {
+    font-family: "Noto Sans Telugu";
+    src: url("{{ fonts_dir_uri }}/NotoSansTelugu-Bold.ttf");
+    font-weight: 700;
+  }
+  @font-face {
+    font-family: "Noto Sans Bengali";
+    src: url("{{ fonts_dir_uri }}/NotoSansBengali-Regular.ttf");
+    font-weight: 400;
+  }
+  @font-face {
+    font-family: "Noto Sans Bengali";
+    src: url("{{ fonts_dir_uri }}/NotoSansBengali-Bold.ttf");
+    font-weight: 700;
+  }
+  @font-face {
+    font-family: "Noto Sans Kannada";
+    src: url("{{ fonts_dir_uri }}/NotoSansKannada-Regular.ttf");
+    font-weight: 400;
+  }
+  @font-face {
+    font-family: "Noto Sans Kannada";
+    src: url("{{ fonts_dir_uri }}/NotoSansKannada-Bold.ttf");
+    font-weight: 700;
+  }
+  @font-face {
+    font-family: "Noto Sans Gujarati";
+    src: url("{{ fonts_dir_uri }}/NotoSansGujarati-Regular.ttf");
+    font-weight: 400;
+  }
+  @font-face {
+    font-family: "Noto Sans Gujarati";
+    src: url("{{ fonts_dir_uri }}/NotoSansGujarati-Bold.ttf");
+    font-weight: 700;
+  }
+  @font-face {
+    font-family: "Noto Sans Malayalam";
+    src: url("{{ fonts_dir_uri }}/NotoSansMalayalam-Regular.ttf");
+    font-weight: 400;
+  }
+  @font-face {
+    font-family: "Noto Sans Malayalam";
+    src: url("{{ fonts_dir_uri }}/NotoSansMalayalam-Bold.ttf");
+    font-weight: 700;
+  }
+
+  @page {
+    size: A4;
+    margin: 20mm 16mm;
+    @bottom-center {
+      content: "Page " counter(page) " of " counter(pages);
+      font-family: "Noto Sans", sans-serif;
+      font-size: 8pt;
+      color: #5B7478;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: "Noto Sans", "Noto Sans Devanagari", "Noto Sans Tamil",
+      "Noto Sans Telugu", "Noto Sans Bengali", "Noto Sans Kannada",
+      "Noto Sans Gujarati", "Noto Sans Malayalam", sans-serif;
+    font-size: 10.5pt;
+    color: #0B2E33;
+    line-height: 1.45;
+  }
+
+  h1, h2 { font-weight: 700; margin: 0 0 4pt 0; }
+  h1 { font-size: 16pt; color: #00808A; }
+  h2 {
+    font-size: 11.5pt;
+    color: #00808A;
+    margin-top: 16pt;
+    padding-bottom: 3pt;
+    border-bottom: 1pt solid #00808A;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 2pt solid #00808A;
+    padding-bottom: 8pt;
+    margin-bottom: 10pt;
+  }
+  .header .meta { text-align: right; font-size: 9pt; color: #5B7478; }
+  .header .meta div { margin-bottom: 2pt; }
+
+  .patient-line { font-size: 10pt; color: #5B7478; margin-bottom: 2pt; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 6pt; }
+  th, td {
+    text-align: left;
+    padding: 4pt 6pt;
+    border-bottom: 0.5pt solid #D8E3E1;
+    font-size: 9.5pt;
+    vertical-align: top;
+  }
+  th { color: #5B7478; font-weight: 700; font-size: 8.5pt; text-transform: uppercase; }
+
+  .score-row { display: flex; align-items: baseline; gap: 10pt; margin-top: 6pt; }
+  .score-total { font-size: 24pt; font-weight: 700; color: #00808A; }
+  .score-band { font-size: 11pt; font-weight: 700; }
+  .band-Good { color: #00C49A; }
+  .band-Fair { color: #00808A; }
+  .band-Needs-attention { color: #D98E04; }
+  .band-Poor { color: #B83A3A; }
+
+  .flag {
+    border-left: 3pt solid #5B7478;
+    padding: 4pt 8pt;
+    margin-top: 6pt;
+    background: #F4F8F7;
+  }
+  .flag-low { border-left-color: #5B7478; }
+  .flag-medium { border-left-color: #D98E04; }
+  .flag-high { border-left-color: #B83A3A; }
+  .flag-label { font-weight: 700; }
+  .flag-reason { font-size: 9pt; color: #5B7478; }
+
+  .recommendation { margin-top: 6pt; padding-bottom: 4pt; }
+  .recommendation .category {
+    display: inline-block;
+    font-size: 8pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #00808A;
+    background: #E6F3F2;
+    border-radius: 4pt;
+    padding: 1pt 6pt;
+    margin-bottom: 2pt;
+  }
+  .recommendation .sources { font-size: 8pt; color: #5B7478; margin-top: 1pt; }
+
+  .note { margin-top: 6pt; }
+  .note .note-meta { font-size: 8pt; color: #5B7478; }
+
+  .muted { color: #5B7478; }
+  .no-data { color: #5B7478; font-style: italic; font-size: 9.5pt; }
+
+  .footer-disclaimer {
+    margin-top: 18pt;
+    padding-top: 8pt;
+    border-top: 0.5pt solid #D8E3E1;
+    font-size: 8pt;
+    color: #5B7478;
+  }
+
+  .incomplete-banner {
+    margin-top: 10pt;
+    padding: 8pt 10pt;
+    border: 1pt solid #D98E04;
+    border-left: 4pt solid #D98E04;
+    background: #FBF3E0;
+  }
+  .incomplete-banner .title {
+    font-weight: 700;
+    font-size: 10.5pt;
+    color: #8A5A00;
+  }
+  .incomplete-banner .detail { font-size: 9pt; color: #5B7478; margin-top: 2pt; }
+
+  .patient-language { font-size: 9pt; color: #5B7478; margin-top: 2pt; font-style: italic; }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <div>
+      <h1>Bedside</h1>
+      <div class="patient-line">
+        {% if patient_profile and patient_profile.full_name %}{{ patient_profile.full_name }}{% else %}{{ patient.username }}{% endif %}
+        {% if patient_profile and patient_profile.age %} &middot; {{ patient_profile.age }} yrs{% endif %}
+        {% if patient_profile and patient_profile.sex %} &middot; {{ patient_profile.sex|capfirst }}{% endif %}
+        {% if bmi %} &middot; BMI {{ bmi }}{% endif %}
+      </div>
+    </div>
+    <div class="meta">
+      <div>Generated {{ generated_at|date:"d M Y, H:i" }}</div>
+      <div>Consultation #{{ consultation.id }} &middot; {{ consultation.get_language_display }}</div>
+      <div>Status: {{ consultation.get_status_display }}</div>
+    </div>
+  </div>
+
+  {% if not is_complete %}
+    <div class="incomplete-banner">
+      <div class="title">
+        &#9888; Incomplete assessment - status: {{ consultation.get_status_display }}
+      </div>
+      <div class="detail">
+        {% if is_escalated %}
+          The lifestyle questionnaire was stopped early because the patient reported symptoms
+          needing prompt medical attention (see risk flags below). A wellness score and
+          lifestyle recommendations were not generated.
+        {% else %}
+          This consultation is still in progress. The wellness score and recommendations below
+          reflect only what has been answered so far and may be incomplete.
+        {% endif %}
+        {% if unanswered_slots %}
+          <br>Unanswered: {{ unanswered_slots|join:", " }}.
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <h2>Chief complaint</h2>
+  {% if consultation.chief_complaint_english %}
+    <p>{{ consultation.chief_complaint_english }}</p>
+  {% else %}
+    <p class="no-data">Not recorded.</p>
+  {% endif %}
+
+  <h2>Symptoms</h2>
+  {% if symptoms %}
+    <p>
+      {% for symptom in symptoms %}{{ symptom.name }}{% if symptom.duration_text %} ({{ symptom.duration_text }}){% endif %}{% if symptom.severity != "unknown" %}, {{ symptom.severity }}{% endif %}{% if not forloop.last %}; {% endif %}{% endfor %}
+    </p>
+  {% else %}
+    <p class="no-data">No symptoms recorded.</p>
+  {% endif %}
+
+  <h2>Lifestyle</h2>
+  {% if lifestyle_rows %}
+    <table>
+      <thead>
+        <tr><th>Factor</th><th>Value</th><th>Assessment</th></tr>
+      </thead>
+      <tbody>
+        {% for row in lifestyle_rows %}
+          <tr>
+            <td>{{ row.label }}</td>
+            <td>{{ row.value }}</td>
+            <td>{{ row.assessment }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="no-data">No lifestyle assessment available.</p>
+  {% endif %}
+
+  <h2>Lifestyle wellness score</h2>
+  {% if wellness_score %}
+    <div class="score-row">
+      <span class="score-total">{{ wellness_score.total }}</span>
+      <span class="score-band band-{{ wellness_score.band|slugify }}">{{ wellness_score.band }}</span>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Factor</th><th>Value</th><th>Weight</th><th>Points</th></tr>
+      </thead>
+      <tbody>
+        {% for row in lifestyle_rows %}
+          <tr>
+            <td>{{ row.label }}</td>
+            <td>{{ row.value }}</td>
+            <td>{{ row.weight }}</td>
+            <td>{{ row.points }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% elif score_withheld_insufficient_data %}
+    <p class="no-data">Not scored - insufficient responses.</p>
+  {% else %}
+    <p class="no-data">Score not yet available.</p>
+  {% endif %}
+
+  <h2>Risk flags</h2>
+  {% if risk_flags %}
+    {% for flag in risk_flags %}
+      <div class="flag flag-{{ flag.severity }}">
+        <div class="flag-label">{{ flag.label }} &middot; {{ flag.severity|capfirst }}</div>
+        <div class="flag-reason">{{ flag.reason }}</div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p class="no-data">No risk flags.</p>
+  {% endif %}
+
+  <h2>Recommendations</h2>
+  {% if recommendations %}
+    {% for rec in recommendations %}
+      <div class="recommendation">
+        <div class="category">{{ rec.category }}</div>
+        <div>{{ rec.text_english }}</div>
+        {% if consultation.language != "en" and rec.text_patient_language %}
+          <div class="patient-language">{{ rec.text_patient_language }}</div>
+        {% endif %}
+        {% if rec.sources %}
+          <div class="sources">
+            Sources:
+            {% for source in rec.sources %}
+              {% if source.file %}{{ source.file }}{% if source.page %} (p. {{ source.page }}){% endif %}{% else %}{{ source }}{% endif %}{% if not forloop.last %}; {% endif %}
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% elif is_escalated %}
+    <p class="no-data">
+      Lifestyle assessment was stopped early because the patient reported symptoms needing
+      prompt medical attention. No lifestyle recommendations were generated.
+    </p>
+  {% else %}
+    <p class="no-data">No recommendations generated.</p>
+  {% endif %}
+
+  <h2>Doctor notes</h2>
+  {% if doctor_notes %}
+    {% for note in doctor_notes %}
+      <div class="note">
+        <div class="note-meta">Dr. {{ note.doctor.username }} &middot; {{ note.created_at|date:"d M Y, H:i" }}</div>
+        <div>{{ note.text }}</div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p class="no-data">No doctor notes yet.</p>
+  {% endif %}
+
+  <div class="footer-disclaimer">
+    This is a screening and documentation aid. It does not diagnose conditions or prescribe
+    medication, and always defers to the treating doctor's clinical judgement. In a medical
+    emergency, contact local emergency services immediately.
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,6 @@
+
+test_phase3.ps1
+
+# Claude Code harness state (scheduled_tasks.lock etc.) - local session
+# state, not project source.
+.claude/

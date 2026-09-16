@@ -1,0 +1,22 @@
+{
+  "sleep": {
+    "category": "sleep",
+    "text_english": "Aim for 7-8 hours of sleep each night, keeping a consistent bedtime and wake-up time."
+  },
+  "exercise": {
+    "category": "exercise",
+    "text_english": "Aim for at least 30 minutes of moderate physical activity on 5 or more days a week."
+  },
+  "water": {
+    "category": "water",
+    "text_english": "Drink 2-3 litres of water spread across the day."
+  },
+  "diet": {
+    "category": "diet",
+    "text_english": "Include more fruits, vegetables and whole grains in your daily meals."
+  },
+  "stress": {
+    "category": "stress",
+    "text_english": "Practise meditation or deep breathing for a few minutes each day to help manage stress."
+  }
+}

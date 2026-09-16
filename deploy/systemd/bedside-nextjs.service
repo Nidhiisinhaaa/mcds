@@ -1,0 +1,18 @@
+[Unit]
+Description=Bedside Next.js frontend
+After=network.target
+
+[Service]
+Type=simple
+User=bedside
+Group=bedside
+WorkingDirectory=/opt/bedside/frontend
+# Next.js loads frontend/.env.local itself - no EnvironmentFile needed here.
+Environment=NODE_ENV=production
+Environment=PORT=3000
+ExecStart=/usr/bin/npm run start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

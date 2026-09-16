@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------- */
+/* "Bedside Teal" design tokens — see docs/design-system.md               */
+/* ---------------------------------------------------------------------- */
+:root {
+  --page: #f4f8f7;
+  --surface: #ffffff;
+  --ink: #0b2e33;
+  --card-dark: #133a40;
+  --primary: #00808a;
+  --mint: #00c49a;
+  --muted: #5b7478;
+  --warning: #d98e04;
+  --danger: #b83a3a;
+
+  --card-radius: 12px;
+}
+
+@theme inline {
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-card-dark: var(--card-dark);
+  --color-primary: var(--primary);
+  --color-mint: var(--mint);
+  --color-muted: var(--muted);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+
+  --radius-card: var(--card-radius);
+
+  --font-heading: var(--font-heading);
+  --font-body: var(--font-body);
+}
+
+/* next/font gives each loaded family its own scoped internal name, so the
+   multi-script fallback chain must reference each one's own CSS variable
+   (var(--font-devanagari) etc.) rather than the plain Google Fonts name -
+   the browser falls through to whichever font actually has the glyph. */
+body {
+  font-family:
+    var(--font-body),
+    var(--font-devanagari),
+    var(--font-tamil),
+    var(--font-telugu),
+    var(--font-bengali),
+    var(--font-kannada),
+    var(--font-gujarati),
+    var(--font-malayalam),
+    sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4,
+.font-heading {
+  font-family: var(--font-heading), serif;
+  font-weight: 600;
+}

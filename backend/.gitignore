@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+db.sqlite3
+.env
+media/
+staticfiles/
+chroma_db/
+
+# Source guideline PDFs for RAG ingestion - large, and not ours to
+# redistribute (ICMR/WHO documents). Keep knowledge_docs/README.md (explains
+# where to get them) tracked; run `python manage.py ingest_guidelines` after
+# placing PDFs here yourself.
+knowledge_docs/*.pdf
