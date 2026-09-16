@@ -227,4 +227,34 @@ export function postDoctorReview(id) {
   return apiFetch(`/api/doctor/consultations/${id}/review/`, { method: "POST" });
 }
 
+// ---- Doctor-led consultations ---------------------------------------------
+
+export function searchDoctorPatients(q) {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  const query = params.toString();
+  return apiFetch(`/api/doctor/patients/${query ? `?${query}` : ""}`);
+}
+
+export function createDoctorPatient(payload) {
+  return apiFetch("/api/doctor/patients/", { method: "POST", body: payload });
+}
+
+export function createDoctorConsultation({ patientId, language }) {
+  return apiFetch("/api/doctor/consultations/", {
+    method: "POST",
+    body: language ? { patient_id: patientId, language } : { patient_id: patientId },
+  });
+}
+
+export function postDoctorConsentConfirm(id) {
+  return apiFetch(`/api/doctor/consultations/${id}/consent/`, { method: "POST" });
+}
+
+// The doctor-led recording session reuses the same message-posting and
+// state endpoints the patient's own chat uses (see
+// consultations.views._get_accessible_consultation on the backend) -
+// getConsultationState/postConsultationText/postConsultationAudio above are
+// shared, not duplicated, for that reason.
+
 export { API_URL };

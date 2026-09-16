@@ -62,6 +62,23 @@ def consultation(db, patient_user):
     return Consultation.objects.create(patient=patient_user, language="hi")
 
 
+@pytest.fixture
+def other_doctor(db):
+    return User.objects.create_user(
+        username="dr_wilson", password="StrongPass123", role=User.Role.DOCTOR
+    )
+
+
+@pytest.fixture
+def doctor_led_consultation(db, doctor_user, unconsented_patient):
+    """An in-clinic consultation the doctor started - patient never went
+    through the app's own consent flow (unconsented_patient has no
+    consent_given_at)."""
+    return Consultation.objects.create(
+        patient=unconsented_patient, doctor=doctor_user, language="en"
+    )
+
+
 @pytest.mark.django_db
 class TestConsultationCreate:
     def test_create_requires_consent(self, api_client, unconsented_patient):
@@ -359,3 +376,120 @@ class TestGroqFailureHandling:
         assert response.status_code == 502
         assert response.data["detail"]
         assert consultation.messages.count() == 0
+
+
+@pytest.mark.django_db
+class TestDoctorLedMessaging:
+    """A doctor may post into a consultation they started/are assigned to
+    (Consultation.doctor), but only once verbal consent has been confirmed,
+    and never into a consultation they're not assigned to - including a
+    patient-led one, even though the doctor role can normally read broadly
+    elsewhere in the app."""
+
+    def _confirm_consent(self, doctor_led_consultation, doctor_user):
+        doctor_led_consultation.patient.patient_profile.consent_given_at = timezone.now()
+        doctor_led_consultation.patient.patient_profile.consent_recorded_by = doctor_user
+        doctor_led_consultation.patient.patient_profile.save()
+
+    def test_assigned_doctor_can_post_text_after_consent_confirmed(
+        self, api_client, doctor_user, doctor_led_consultation
+    ):
+        self._confirm_consent(doctor_led_consultation, doctor_user)
+        api_client.force_authenticate(user=doctor_user)
+        url = reverse("consultation-text-message", args=[doctor_led_consultation.id])
+        response = api_client.post(url, {"text": "Patient reports feeling tired."}, format="json")
+        assert response.status_code == 201
+        assert response.data["patient_message"]["sender"] == "patient"
+
+    def test_assigned_doctor_can_post_audio_after_consent_confirmed(
+        self, api_client, doctor_user, doctor_led_consultation
+    ):
+        self._confirm_consent(doctor_led_consultation, doctor_user)
+        api_client.force_authenticate(user=doctor_user)
+        url = reverse("consultation-audio-message", args=[doctor_led_consultation.id])
+        audio = SimpleUploadedFile("note.webm", b"fake-audio-bytes", content_type="audio/webm")
+        response = api_client.post(url, {"audio": audio}, format="multipart")
+        assert response.status_code == 201
+
+    def test_assigned_doctor_blocked_without_consent_confirmation(
+        self, api_client, doctor_user, doctor_led_consultation
+    ):
+        api_client.force_authenticate(user=doctor_user)
+        url = reverse("consultation-text-message", args=[doctor_led_consultation.id])
+        response = api_client.post(url, {"text": "hello"}, format="json")
+        assert response.status_code == 403
+        assert "consent" in str(response.data).lower()
+        assert doctor_led_consultation.messages.count() == 0
+
+    def test_assigned_doctor_blocked_without_consent_does_not_silently_pass(
+        self, api_client, doctor_user, doctor_led_consultation
+    ):
+        """Consent absence must be an explicit rejection, not a value that
+        happens to fall through as falsy/None and get treated as satisfied."""
+        doctor_led_consultation.patient.patient_profile.consent_given_at = None
+        doctor_led_consultation.patient.patient_profile.save()
+        api_client.force_authenticate(user=doctor_user)
+        url = reverse("consultation-audio-message", args=[doctor_led_consultation.id])
+        audio = SimpleUploadedFile("note.webm", b"fake-audio-bytes", content_type="audio/webm")
+        response = api_client.post(url, {"audio": audio}, format="multipart")
+        assert response.status_code == 403
+        assert doctor_led_consultation.messages.count() == 0
+
+    def test_unrelated_doctor_cannot_post_into_patient_led_consultation(
+        self, api_client, doctor_user, consultation
+    ):
+        """`consultation` (from the module fixture) is patient-led: started
+        by patient_user themselves, Consultation.doctor is still null. No
+        doctor - assigned or not - may post into it."""
+        assert consultation.doctor_id is None
+        api_client.force_authenticate(user=doctor_user)
+        url = reverse("consultation-text-message", args=[consultation.id])
+        response = api_client.post(url, {"text": "hello"}, format="json")
+        assert response.status_code == 404
+        assert consultation.messages.count() == 0
+
+    def test_other_doctor_cannot_post_into_assigned_consultation(
+        self, api_client, other_doctor, doctor_led_consultation
+    ):
+        api_client.force_authenticate(user=other_doctor)
+        url = reverse("consultation-text-message", args=[doctor_led_consultation.id])
+        response = api_client.post(url, {"text": "hello"}, format="json")
+        assert response.status_code == 404
+        assert doctor_led_consultation.messages.count() == 0
+
+    def test_assigned_doctor_can_read_state(
+        self, api_client, doctor_user, doctor_led_consultation
+    ):
+        api_client.force_authenticate(user=doctor_user)
+        url = reverse("consultation-state", args=[doctor_led_consultation.id])
+        response = api_client.get(url)
+        assert response.status_code == 200
+        assert response.data["status"] == "in_progress"
+
+    def test_unrelated_doctor_cannot_read_state(self, api_client, other_doctor, doctor_led_consultation):
+        api_client.force_authenticate(user=other_doctor)
+        url = reverse("consultation-state", args=[doctor_led_consultation.id])
+        response = api_client.get(url)
+        assert response.status_code == 404
+
+    def test_patient_still_cannot_post_into_doctor_led_consultation_they_dont_own(
+        self, api_client, other_patient, doctor_led_consultation
+    ):
+        """Existing patient-side access is unchanged: a patient can only
+        post into their own consultations, doctor-led or not."""
+        api_client.force_authenticate(user=other_patient)
+        url = reverse("consultation-text-message", args=[doctor_led_consultation.id])
+        response = api_client.post(url, {"text": "hello"}, format="json")
+        assert response.status_code == 404
+
+    def test_patient_led_consultation_unaffected_by_doctor_consent_gate(
+        self, api_client, patient_user, consultation
+    ):
+        """The consent gate only applies to doctor-authenticated requests -
+        patient_user already has consent_given_at set at registration/onboarding
+        time (checked once at consultation creation), never re-checked per
+        message, so this must keep working exactly as before."""
+        api_client.force_authenticate(user=patient_user)
+        url = reverse("consultation-text-message", args=[consultation.id])
+        response = api_client.post(url, {"text": "hello"}, format="json")
+        assert response.status_code == 201

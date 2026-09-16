@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
@@ -42,6 +43,17 @@ class PatientProfile(models.Model):
         max_length=5, choices=Language.choices, default=Language.ENGLISH
     )
     consent_given_at = models.DateTimeField(null=True, blank=True)
+    # Set only when a doctor recorded verbal consent on the patient's behalf
+    # (doctor-led, in-clinic consultations - the patient never used the app
+    # themselves to hit POST /api/auth/consent/). Null for the normal
+    # self-service consent flow, where consent_given_at alone is sufficient.
+    consent_recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
 
     def __str__(self):
         return self.full_name or self.user.username

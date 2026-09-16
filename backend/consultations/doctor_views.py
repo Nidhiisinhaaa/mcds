@@ -17,13 +17,16 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.models import PatientProfile
 from accounts.permissions import IsDoctor
 from assessment import pipeline
 from assessment.models import LifestyleProfile
 from consultations.doctor_serializers import (
+    DoctorConsultationCreateSerializer,
     DoctorConsultationDetailSerializer,
     DoctorConsultationListSerializer,
     DoctorNoteSerializer,
+    DoctorPatientSerializer,
 )
 from consultations.models import Consultation
 
@@ -52,9 +55,20 @@ ALLOWED_OVERRIDE_FIELDS = {
 }
 
 
-class DoctorConsultationListView(generics.ListAPIView):
+class DoctorConsultationListView(generics.ListCreateAPIView):
+    """GET lists/searches the doctor queue (unchanged). POST starts a new
+    in-clinic, doctor-led consultation for a patient the doctor picked or
+    just created (see DoctorPatientListCreateView) - the doctor is
+    pre-assigned as Consultation.doctor, which is what scopes their later
+    permission to post messages into it (see
+    consultations.views._get_accessible_consultation)."""
+
     permission_classes = [IsDoctor]
-    serializer_class = DoctorConsultationListSerializer
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return DoctorConsultationCreateSerializer
+        return DoctorConsultationListSerializer
 
     def get_queryset(self):
         qs = (
@@ -76,6 +90,46 @@ class DoctorConsultationListView(generics.ListAPIView):
             )
 
         return qs.order_by("priority", "-started_at")
+
+
+class DoctorPatientListCreateView(generics.ListCreateAPIView):
+    """GET searches existing patients (?q=) for the "start consultation"
+    dropdown. POST creates a new patient record inline, for a patient who's
+    never used the app before (walk-in / in-clinic case)."""
+
+    permission_classes = [IsDoctor]
+    serializer_class = DoctorPatientSerializer
+
+    def get_queryset(self):
+        qs = PatientProfile.objects.select_related("user").order_by("full_name")
+        query = self.request.query_params.get("q")
+        if query:
+            qs = qs.filter(Q(full_name__icontains=query) | Q(user__username__icontains=query))
+        return qs
+
+
+class DoctorConsentConfirmView(APIView):
+    """A doctor confirms they obtained the patient's verbal consent before
+    an in-clinic consultation can proceed - see
+    consultations.views._require_consent_for_doctor_led, which enforces this
+    at message-post time and never silently bypasses it. Scoped to the
+    assigned doctor only, same as message-posting: only the doctor actually
+    running this consultation can attest to consent having been obtained."""
+
+    permission_classes = [IsDoctor]
+
+    def post(self, request, pk):
+        consultation = get_object_or_404(Consultation, pk=pk, doctor=request.user)
+        profile, _ = PatientProfile.objects.get_or_create(user=consultation.patient)
+        profile.consent_given_at = timezone.now()
+        profile.consent_recorded_by = request.user
+        profile.save(update_fields=["consent_given_at", "consent_recorded_by"])
+        return Response(
+            {
+                "consent_given_at": profile.consent_given_at,
+                "consent_recorded_by": request.user.username,
+            }
+        )
 
 
 class DoctorConsultationDetailView(generics.RetrieveAPIView):

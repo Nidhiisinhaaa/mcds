@@ -6,7 +6,8 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.permissions import IsDoctor, IsPatient
+from accounts.models import User
+from accounts.permissions import IsDoctor, IsPatient, IsPatientOrDoctor
 from assessment import pipeline
 from assessment.engine import orchestrator
 from assessment.serializers import LifestyleProfileSerializer
@@ -24,8 +25,31 @@ from consultations.serializers import (
 logger = logging.getLogger("consultations.views")
 
 
-def _get_owned_consultation(request, pk):
-    return get_object_or_404(Consultation, pk=pk, patient=request.user)
+def _get_accessible_consultation(request, pk):
+    """Patients: only their own consultations. Doctors: only a consultation
+    they started or are assigned to (Consultation.doctor) - deliberately
+    tighter than the broad clinic-wide read access doctor_views.py gives for
+    review/notes/etc, since this gates actually posting into the patient's
+    conversation, not just viewing it."""
+    user = request.user
+    if user.role == User.Role.PATIENT:
+        return get_object_or_404(Consultation, pk=pk, patient=user)
+    return get_object_or_404(Consultation, pk=pk, doctor=user)
+
+
+def _require_consent_for_doctor_led(request, consultation):
+    """A doctor-led consultation's patient may never have gone through the
+    app's own POST /api/auth/consent/ flow - require the doctor to have
+    explicitly confirmed verbal consent (see DoctorConsentConfirmView) before
+    the conversation can proceed. Never silently skip this."""
+    if request.user.role != User.Role.DOCTOR:
+        return
+    profile = getattr(consultation.patient, "patient_profile", None)
+    if profile is None or profile.consent_given_at is None:
+        raise PermissionDenied(
+            "Verbal consent must be confirmed before starting this consultation. "
+            "Call POST /api/doctor/consultations/{id}/consent/ first."
+        )
 
 
 def _reject_unless_in_progress(consultation):
@@ -87,10 +111,10 @@ class ConsultationDetailView(generics.RetrieveAPIView):
 
 
 class ConsultationStateView(APIView):
-    permission_classes = [IsPatient]
+    permission_classes = [IsPatientOrDoctor]
 
     def get(self, request, pk):
-        consultation = _get_owned_consultation(request, pk)
+        consultation = _get_accessible_consultation(request, pk)
         profile = getattr(consultation, "lifestyle_profile", None)
         return Response(
             {
@@ -117,11 +141,12 @@ class ConsultationReanalyseView(APIView):
 
 
 class ConsultationAudioMessageView(APIView):
-    permission_classes = [IsPatient]
+    permission_classes = [IsPatientOrDoctor]
 
     def post(self, request, pk):
-        consultation = _get_owned_consultation(request, pk)
+        consultation = _get_accessible_consultation(request, pk)
         _reject_unless_in_progress(consultation)
+        _require_consent_for_doctor_led(request, consultation)
 
         input_serializer = AudioMessageInputSerializer(data=request.data)
         input_serializer.is_valid(raise_exception=True)
@@ -164,11 +189,12 @@ class ConsultationAudioMessageView(APIView):
 
 
 class ConsultationTextMessageView(APIView):
-    permission_classes = [IsPatient]
+    permission_classes = [IsPatientOrDoctor]
 
     def post(self, request, pk):
-        consultation = _get_owned_consultation(request, pk)
+        consultation = _get_accessible_consultation(request, pk)
         _reject_unless_in_progress(consultation)
+        _require_consent_for_doctor_led(request, consultation)
 
         input_serializer = TextMessageInputSerializer(data=request.data)
         input_serializer.is_valid(raise_exception=True)

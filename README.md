@@ -84,6 +84,7 @@ pip install -r requirements.txt
 cp .env.example .env         # then fill in GROQ_API_KEY - see Environment variables below
 python manage.py migrate
 python manage.py createsuperuser   # optional, for /admin/
+# Add your own guideline PDFs to backend/knowledge_docs/ first - see below - then:
 python manage.py ingest_guidelines # populate the RAG knowledge base from backend/knowledge_docs/
 python manage.py seed_demo         # optional - 1 doctor + 3 demo patients/consultations, see below
 python manage.py runserver
@@ -94,10 +95,24 @@ fixture data — the whole backend, including `seed_demo`, works fully offline w
 API key needed for a first run. Set `GROQ_MOCK=0` and provide a real `GROQ_API_KEY` to
 use the live API.
 
+`backend/knowledge_docs/*.pdf` is gitignored (large, and not ours to redistribute), so
+**a fresh clone's `knowledge_docs/` folder is empty** — `ingest_guidelines` has nothing
+to ingest until you add PDFs yourself. This project was built and tested against:
+
+- **WHO guidelines on physical activity and sedentary behaviour** — save as
+  `who-physical-activity-guidelines.pdf`
+- **ICMR-NIN Dietary Guidelines for Indians** (National Institute of Nutrition / Indian
+  Council of Medical Research) — save as `icmr-nin-dietary-guidelines.pdf`
+
+Any genuine guideline PDF with selectable (non-scanned) text works — see
+`backend/knowledge_docs/README.md` for the full list of expected topics (sleep hygiene,
+hydration) and how a filename becomes the RAG `topic` metadata.
+
 `ingest_guidelines` extracts, chunks, and embeds every PDF in `backend/knowledge_docs/`
-into the local ChromaDB collection. Without it, RAG retrieval finds nothing and
-recommendations fall back to generic guidance (`backend/assessment/data/fallback_recommendations.json`)
-instead of guideline-cited text — run it once before trying the full flow.
+into the local ChromaDB collection. Without it — or before you've added any PDFs — RAG
+retrieval finds nothing and recommendations fall back to generic guidance
+(`backend/assessment/data/fallback_recommendations.json`) instead of guideline-cited
+text, so add your PDFs before running it.
 
 `seed_demo` creates one doctor and three patients, each with a completed (or
 escalated) consultation covering a different scenario, and prints every login at the
@@ -192,12 +207,14 @@ checks require a JWT (`Authorization: Bearer <token>`).
 | POST | `/api/auth/consent/` | Record patient consent |
 | GET/POST | `/api/consultations/` | List own consultations / start a new one (patient) |
 | GET | `/api/consultations/{id}/` | Consultation detail (patient's own) |
-| GET | `/api/consultations/{id}/state/` | Status, per-slot fill state, current profile (patient) |
-| POST | `/api/consultations/{id}/text/` | Send a text message, advance the conversation |
-| POST | `/api/consultations/{id}/audio/` | Send a voice message (transcribed, then advances the conversation) |
+| GET | `/api/consultations/{id}/state/` | Status, per-slot fill state, current profile (patient, or the assigned doctor for a doctor-led consultation) |
+| POST | `/api/consultations/{id}/text/` | Send a text message, advance the conversation (patient, or the assigned doctor) |
+| POST | `/api/consultations/{id}/audio/` | Send a voice message, transcribed then advances the conversation (patient, or the assigned doctor) |
 | POST | `/api/consultations/{id}/reanalyse/` | Re-run scoring/risk-flags/recommendations (doctor) |
-| GET | `/api/doctor/consultations/` | Doctor queue (filterable, searchable) |
+| GET/POST | `/api/doctor/patients/` | Search existing patients (`?q=`) / create a new patient record inline (doctor) |
+| GET/POST | `/api/doctor/consultations/` | Doctor queue (filterable, searchable) / start a doctor-led consultation for a patient (doctor) |
 | GET | `/api/doctor/consultations/{id}/` | Full clinical detail view (doctor) |
+| POST | `/api/doctor/consultations/{id}/consent/` | Confirm verbal consent was obtained for a doctor-led consultation (assigned doctor only) |
 | PATCH | `/api/doctor/consultations/{id}/lifestyle/` | Override an extracted lifestyle value (doctor) |
 | POST | `/api/doctor/consultations/{id}/notes/` | Add a doctor's note |
 | POST | `/api/doctor/consultations/{id}/review/` | Mark a consultation reviewed |

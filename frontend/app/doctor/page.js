@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ScoreBadge from "@/components/ScoreBadge";
+import StartConsultationDialog from "@/components/StartConsultationDialog";
 import StatusBadge from "@/components/StatusBadge";
 import { listDoctorConsultations, logout } from "@/lib/api";
 import { useRequireDoctor } from "@/lib/useRequireDoctor";
@@ -24,6 +25,7 @@ export default function DoctorQueuePage() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
+  const [showStartDialog, setShowStartDialog] = useState(false);
 
   useEffect(() => {
     if (!ready) return;
@@ -71,7 +73,14 @@ export default function DoctorQueuePage() {
       <div className="mx-auto max-w-6xl px-6 py-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <h1 className="font-heading text-2xl font-semibold text-ink">Patient queue</h1>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setShowStartDialog(true)}
+              className="rounded-card bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
+            >
+              Start consultation
+            </button>
             <input
               type="search"
               value={search}
@@ -156,6 +165,16 @@ export default function DoctorQueuePage() {
           </table>
         </div>
       </div>
+
+      {showStartDialog && (
+        <StartConsultationDialog
+          onClose={() => setShowStartDialog(false)}
+          onStarted={(consultationId) => {
+            setShowStartDialog(false);
+            router.push(`/doctor/consult/${consultationId}/record`);
+          }}
+        />
+      )}
     </main>
   );
 }

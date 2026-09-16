@@ -3,9 +3,11 @@ consultations/serializers.py and assessment/serializers.py, these expose
 internal fields (text_english, sources, evidence, doctor_overrides) that are
 appropriate for clinical review but not for the patient's own view."""
 
+import uuid
+
 from rest_framework import serializers
 
-from accounts.models import PatientProfile
+from accounts.models import PatientProfile, User
 from assessment import risk_rules
 from assessment.engine import slots as slots_engine
 from assessment.models import DoctorNote, LifestyleProfile, Recommendation, RiskFlag, Symptom
@@ -16,14 +18,87 @@ from consultations.serializers import MessageSerializer
 
 class DoctorPatientProfileSerializer(serializers.ModelSerializer):
     bmi = serializers.SerializerMethodField()
+    consent_recorded_by = serializers.SerializerMethodField()
 
     class Meta:
         model = PatientProfile
-        fields = ["full_name", "age", "sex", "height_cm", "weight_kg", "preferred_language", "bmi"]
+        fields = [
+            "full_name",
+            "age",
+            "sex",
+            "height_cm",
+            "weight_kg",
+            "preferred_language",
+            "bmi",
+            "consent_given_at",
+            "consent_recorded_by",
+        ]
         read_only_fields = fields
 
     def get_bmi(self, profile):
         return risk_rules.compute_bmi(profile)
+
+    def get_consent_recorded_by(self, profile):
+        doctor = profile.consent_recorded_by
+        return doctor.username if doctor else None
+
+
+class DoctorPatientSerializer(serializers.ModelSerializer):
+    """Search results for the "pick an existing patient" dropdown, and the
+    inline "create a new patient record" form, when a doctor starts an
+    in-clinic consultation (see DoctorConsultationListCreateView). The
+    created User has no usable password - this patient record exists for
+    clinical purposes, not for the patient to log into the app themselves."""
+
+    id = serializers.IntegerField(source="user.id", read_only=True)
+    username = serializers.CharField(source="user.username", read_only=True)
+
+    class Meta:
+        model = PatientProfile
+        fields = [
+            "id",
+            "username",
+            "full_name",
+            "age",
+            "sex",
+            "height_cm",
+            "weight_kg",
+            "preferred_language",
+        ]
+        read_only_fields = ["id", "username"]
+        extra_kwargs = {"full_name": {"required": True, "allow_blank": False}}
+
+    def create(self, validated_data):
+        username = f"patient-{uuid.uuid4().hex[:12]}"
+        user = User(username=username, role=User.Role.PATIENT)
+        user.set_unusable_password()
+        user.save()
+        return PatientProfile.objects.create(user=user, **validated_data)
+
+
+class DoctorConsultationCreateSerializer(serializers.ModelSerializer):
+    """A doctor starting an in-clinic consultation on behalf of a patient
+    they've picked or just created - see DoctorConsultationListCreateView."""
+
+    patient_id = serializers.PrimaryKeyRelatedField(
+        source="patient", queryset=User.objects.filter(role=User.Role.PATIENT)
+    )
+    language = serializers.ChoiceField(choices=PatientProfile.Language.choices, required=False)
+
+    class Meta:
+        model = Consultation
+        fields = ["id", "patient_id", "language", "status", "started_at"]
+        read_only_fields = ["id", "status", "started_at"]
+
+    def create(self, validated_data):
+        doctor = self.context["request"].user
+        patient = validated_data.pop("patient")
+        if "language" not in validated_data:
+            profile = getattr(patient, "patient_profile", None)
+            validated_data["language"] = (
+                profile.preferred_language if profile else PatientProfile.Language.ENGLISH
+            )
+        return Consultation.objects.create(patient=patient, doctor=doctor, **validated_data)
 
 
 class DoctorLifestyleProfileSerializer(serializers.ModelSerializer):

@@ -363,3 +363,182 @@ class TestDoctorReview:
         assert consultation.doctor == doctor_user
         assert consultation.reviewed_at is not None
         assert consultation.status == Consultation.Status.REVIEWED
+
+
+@pytest.mark.django_db
+class TestDoctorPatientListCreate:
+    def test_unauthenticated_forbidden(self, api_client):
+        assert api_client.get(reverse("doctor-patient-list-create")).status_code == 401
+        assert api_client.post(reverse("doctor-patient-list-create"), {}, format="json").status_code == 401
+
+    def test_patient_forbidden(self, api_client, patient_user):
+        api_client.force_authenticate(user=patient_user)
+        response = api_client.get(reverse("doctor-patient-list-create"))
+        assert response.status_code == 403
+
+    def test_search_by_name(self, api_client, doctor_user, patient_user):
+        api_client.force_authenticate(user=doctor_user)
+        response = api_client.get(reverse("doctor-patient-list-create"), {"q": "Amit"})
+        assert response.status_code == 200
+        names = [row["full_name"] for row in response.data["results"]]
+        assert "Amit Kumar" in names
+
+    def test_search_no_match(self, api_client, doctor_user, patient_user):
+        api_client.force_authenticate(user=doctor_user)
+        response = api_client.get(reverse("doctor-patient-list-create"), {"q": "Nobody"})
+        assert response.status_code == 200
+        assert response.data["results"] == []
+
+    def test_create_new_patient_inline(self, api_client, doctor_user):
+        api_client.force_authenticate(user=doctor_user)
+        payload = {
+            "full_name": "Walk-in Patient",
+            "age": 40,
+            "sex": "female",
+            "height_cm": 160,
+            "weight_kg": 55,
+            "preferred_language": "ta",
+        }
+        response = api_client.post(reverse("doctor-patient-list-create"), payload, format="json")
+        assert response.status_code == 201
+        assert response.data["full_name"] == "Walk-in Patient"
+        assert response.data["preferred_language"] == "ta"
+        assert response.data["id"]
+        assert response.data["username"]
+
+        created_user = User.objects.get(id=response.data["id"])
+        assert created_user.role == User.Role.PATIENT
+        assert not created_user.has_usable_password()
+        assert created_user.patient_profile.full_name == "Walk-in Patient"
+        assert created_user.patient_profile.consent_given_at is None
+
+    def test_create_requires_full_name(self, api_client, doctor_user):
+        api_client.force_authenticate(user=doctor_user)
+        response = api_client.post(
+            reverse("doctor-patient-list-create"), {"age": 30}, format="json"
+        )
+        assert response.status_code == 400
+        assert "full_name" in response.data
+
+
+@pytest.mark.django_db
+class TestDoctorConsultationCreate:
+    def test_unauthenticated_forbidden(self, api_client):
+        response = api_client.post(reverse("doctor-consultation-list"), {}, format="json")
+        assert response.status_code == 401
+
+    def test_patient_forbidden(self, api_client, patient_user):
+        api_client.force_authenticate(user=patient_user)
+        response = api_client.post(reverse("doctor-consultation-list"), {}, format="json")
+        assert response.status_code == 403
+
+    def test_doctor_creates_consultation_for_existing_patient(
+        self, api_client, doctor_user, patient_user
+    ):
+        api_client.force_authenticate(user=doctor_user)
+        response = api_client.post(
+            reverse("doctor-consultation-list"),
+            {"patient_id": patient_user.id},
+            format="json",
+        )
+        assert response.status_code == 201
+        assert response.data["status"] == "in_progress"
+        # Defaults to the patient's own preferred_language ("hi", see fixture).
+        assert response.data["language"] == "hi"
+
+        created = Consultation.objects.get(pk=response.data["id"])
+        assert created.patient_id == patient_user.id
+        assert created.doctor_id == doctor_user.id
+
+    def test_language_override(self, api_client, doctor_user, patient_user):
+        api_client.force_authenticate(user=doctor_user)
+        response = api_client.post(
+            reverse("doctor-consultation-list"),
+            {"patient_id": patient_user.id, "language": "ta"},
+            format="json",
+        )
+        assert response.status_code == 201
+        assert response.data["language"] == "ta"
+
+    def test_create_for_patient_created_via_the_patient_endpoint(self, api_client, doctor_user):
+        api_client.force_authenticate(user=doctor_user)
+        create_patient = api_client.post(
+            reverse("doctor-patient-list-create"),
+            {"full_name": "New Walk-in", "preferred_language": "bn"},
+            format="json",
+        )
+        assert create_patient.status_code == 201
+        new_patient_id = create_patient.data["id"]
+
+        response = api_client.post(
+            reverse("doctor-consultation-list"),
+            {"patient_id": new_patient_id},
+            format="json",
+        )
+        assert response.status_code == 201
+        assert response.data["language"] == "bn"
+
+    def test_missing_patient_id_rejected(self, api_client, doctor_user):
+        api_client.force_authenticate(user=doctor_user)
+        response = api_client.post(reverse("doctor-consultation-list"), {}, format="json")
+        assert response.status_code == 400
+        assert "patient_id" in response.data
+
+    def test_doctor_queue_get_still_works_after_adding_post(
+        self, api_client, doctor_user, consultation
+    ):
+        """Converting the list view to ListCreateAPIView must not disturb
+        the existing GET (queue) behaviour."""
+        api_client.force_authenticate(user=doctor_user)
+        response = api_client.get(reverse("doctor-consultation-list"))
+        assert response.status_code == 200
+        ids = [row["id"] for row in response.data["results"]]
+        assert consultation.id in ids
+
+
+@pytest.mark.django_db
+class TestDoctorConsentConfirm:
+    @pytest.fixture
+    def doctor_led_consultation(self, doctor_user, other_doctor):
+        walkin = User.objects.create_user(
+            username="walkin_patient", password="StrongPass123", role=User.Role.PATIENT
+        )
+        PatientProfile.objects.create(user=walkin, full_name="Walk-in", preferred_language="en")
+        return Consultation.objects.create(patient=walkin, doctor=doctor_user, language="en")
+
+    def test_unauthenticated_forbidden(self, api_client, doctor_led_consultation):
+        url = reverse("doctor-consultation-consent", args=[doctor_led_consultation.id])
+        assert api_client.post(url).status_code == 401
+
+    def test_patient_forbidden(self, api_client, patient_user, doctor_led_consultation):
+        api_client.force_authenticate(user=patient_user)
+        url = reverse("doctor-consultation-consent", args=[doctor_led_consultation.id])
+        assert api_client.post(url).status_code == 403
+
+    def test_assigned_doctor_confirms_consent(
+        self, api_client, doctor_user, doctor_led_consultation
+    ):
+        api_client.force_authenticate(user=doctor_user)
+        url = reverse("doctor-consultation-consent", args=[doctor_led_consultation.id])
+        response = api_client.post(url)
+        assert response.status_code == 200
+        assert response.data["consent_given_at"]
+        assert response.data["consent_recorded_by"] == doctor_user.username
+
+        doctor_led_consultation.patient.patient_profile.refresh_from_db()
+        profile = doctor_led_consultation.patient.patient_profile
+        assert profile.consent_given_at is not None
+        assert profile.consent_recorded_by == doctor_user
+
+    def test_unassigned_doctor_cannot_confirm_consent_for_someone_elses_consultation(
+        self, api_client, other_doctor, doctor_led_consultation
+    ):
+        """Only the doctor actually running this consultation can attest
+        that verbal consent was obtained - not just any doctor."""
+        api_client.force_authenticate(user=other_doctor)
+        url = reverse("doctor-consultation-consent", args=[doctor_led_consultation.id])
+        response = api_client.post(url)
+        assert response.status_code == 404
+
+        doctor_led_consultation.patient.patient_profile.refresh_from_db()
+        assert doctor_led_consultation.patient.patient_profile.consent_given_at is None
